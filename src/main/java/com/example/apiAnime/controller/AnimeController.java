@@ -4,16 +4,18 @@ import com.example.apiAnime.domain.dto.AnimeError;
 import com.example.apiAnime.domain.dto.RequestAnimeByName;
 
 import com.example.apiAnime.domain.dto.RequestFavourite;
-import com.example.apiAnime.domain.dto.ResponseList;
 
 import com.example.apiAnime.domain.model.Anime;
 import com.example.apiAnime.domain.model.Comment;
+import com.example.apiAnime.domain.model.User;
 import com.example.apiAnime.domain.model.projection.AnimeProjection;
 import com.example.apiAnime.domain.model.projection.CommentsAnimeProjection;
 import com.example.apiAnime.repository.AnimeRepository;
 import com.example.apiAnime.repository.CommentRepository;
+import com.example.apiAnime.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -26,10 +28,12 @@ public class AnimeController {
 
     private final AnimeRepository animeRepository;
     private final CommentRepository commentRepository;
+    private final UserRepository userRepository;
 
-    AnimeController(AnimeRepository animeRepository, CommentRepository commentRepository){
+    AnimeController(AnimeRepository animeRepository, CommentRepository commentRepository, UserRepository userRepository){
         this.animeRepository = animeRepository;
         this.commentRepository = commentRepository;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/")
@@ -110,13 +114,24 @@ public class AnimeController {
     }
 
     @PostMapping("/comment")
-    public ResponseEntity doComment(@RequestBody Comment comment){
-        Comment commentPost = new Comment();
-        commentPost.userid = comment.userid;
-        commentPost.animeid = comment.animeid;
-        commentPost.comment = comment.comment;
-        commentRepository.save(commentPost);
-        return ResponseEntity.ok().build();
+    public ResponseEntity doComment(@RequestBody Comment comment, Authentication authentication){
+        if(authentication!=null){
+            User authenticatedUser = userRepository.findByUsername(authentication.getName());
+            Anime animeToComment = animeRepository.findById(comment.animeid).orElse(null);
+            if (authenticatedUser != null) {
+                if (animeToComment != null) {
+                    Comment commentPost = new Comment();
+                    commentPost.userid = authenticatedUser.userid;
+                    commentPost.animeid = comment.animeid;
+                    commentPost.comment = comment.comment;
+                    commentRepository.save(commentPost);
+                    return ResponseEntity.ok().build();
+                }
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(AnimeError.message("No s'ha trobat l'anime amb l'id '" + comment.animeid + "'"));
+
+            }
+        }
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(AnimeError.message("No autorizado"));
     }
 
     @DeleteMapping("/comment/{animeid}/{userid}")
